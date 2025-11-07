@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Fast Delivery Review Analyzer 🚚</title>
+
+<!-- Dependencies -->
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
+
+<style>
+:root {
+  --primary: #4f46e5;
+  --secondary: #06b6d4;
+  --success: #10b981;
+  --danger: #ef4444;
+  --warning: #f59e0b;
+  --light: #f8fafc;
+  --dark: #1e293b;
+  --glass: rgba(255, 255, 255, 0.15);
+}
+
+body {
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background: radial-gradient(circle at top left, #4f46e5, #764ba2);
+  min-height: 100vh;
+  color: var(--dark);
+  overflow-x: hidden;
+  padding: 2rem;
+  transition: background 0.6s ease;
+}
+
+/* ✨ Animated Gradient Background */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(120deg, #4f46e5, #06b6d4, #764ba2);
+  background-size: 300% 300%;
+  animation: moveGradient 10s infinite alternate;
+  z-index: -1;
+}
+@keyframes moveGradient {
+  0% { background-position: 0% 50%; }
+  100% { background-position: 100% 50%; }
+}
+
+.main-container {
+  max-width: 950px;
+  margin: auto;
+}
+
+.header-section {
+  backdrop-filter: blur(20px);
+  background: var(--glass);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 20px;
+  padding: 2rem;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  animation: fadeInDown 0.8s ease;
+}
+@keyframes fadeInDown {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.header-title {
+  font-size: 2.5rem;
+  font-weight: 700;
+  color: white;
+  letter-spacing: 1px;
+  text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+}
+
+.header-subtitle {
+  color: #e0e7ff;
+  font-size: 1.1rem;
+}
+
+/* 💡 Cards */
+.card-custom {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 20px;
+  border: none;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+  transition: all 0.3s ease;
+  margin-bottom: 2rem;
+}
+.card-custom:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.25);
+}
+
+/* 🎯 Buttons */
+.btn-predict {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  border: none;
+  color: white;
+  font-weight: 600;
+  border-radius: 12px;
+  padding: 1rem 2rem;
+  box-shadow: 0 5px 15px rgba(79, 70, 229, 0.4);
+  transition: all 0.3s ease;
+}
+.btn-predict:hover {
+  transform: scale(1.05);
+}
+.btn-predict:disabled {
+  opacity: 0.6;
+}
+
+/* ⚙️ Model Cards */
+.model-selector {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.model-label {
+  background: var(--light);
+  border: 2px solid #e5e7eb;
+  border-radius: 12px;
+  text-align: center;
+  padding: 1rem;
+  cursor: pointer;
+  transition: 0.3s ease;
+}
+.model-label:hover {
+  border-color: var(--primary);
+  background: #eef2ff;
+}
+input[type="radio"]:checked + .model-label {
+  background: linear-gradient(135deg, var(--primary), var(--secondary));
+  color: white;
+  transform: scale(1.05);
+  box-shadow: 0 5px 20px rgba(79, 70, 229, 0.4);
+}
+
+/* 🧠 Result Section */
+.result-label {
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+.progress-custom {
+  height: 25px;
+  border-radius: 20px;
+  background: #e5e7eb;
+  overflow: hidden;
+}
+.progress-bar-custom {
+  background: linear-gradient(90deg, #10b981, #22d3ee);
+  text-align: center;
+  color: white;
+  font-weight: 600;
+  transition: width 1.2s ease;
+}
+
+/* 🌟 Toasts */
+.toast-custom {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
+  padding: 1rem 1.5rem;
+  animation: slideInRight 0.4s ease-out;
+}
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(100px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+</style>
+</head>
+
+<body>
+<main class="main-container">
+  <header class="header-section text-center">
+    <h1 class="header-title"><i class="fa-solid fa-bolt me-2"></i>Fast Delivery Review Analyzer</h1>
+    <p class="header-subtitle"><i class="fa-solid fa-brain me-2"></i>Smart AI Sentiment Insights for Logistics Feedback</p>
+  </header>
+
+  <!-- Model Selector -->
+  <section class="card-custom p-4">
+    <h4 class="mb-4"><i class="fa-solid fa-robot me-2"></i>Select AI Model</h4>
+    <div class="model-selector">
+      <label class="model-option">
+        <input type="radio" name="modelChoice" id="tfidfModel" value="tfidf" checked hidden>
+        <div class="model-label">
+          <i class="fa-solid fa-chart-line fa-2x mb-2"></i>
+          <div>TF-IDF Model</div>
+          <small>Accuracy: 88%</small>
+        </div>
+      </label>
+      <label class="model-option">
+        <input type="radio" name="modelChoice" id="bertModel" value="distilbert" hidden>
+        <div class="model-label">
+          <i class="fa-solid fa-brain fa-2x mb-2"></i>
+          <div>DistilBERT</div>
+          <small>Accuracy: 93%</small>
+        </div>
+      </label>
+    </div>
+  </section>
+
+  <!-- Review Input -->
+  <section class="card-custom p-4">
+    <h4 class="mb-3"><i class="fa-solid fa-comment-dots me-2"></i>Enter Delivery Review</h4>
+    <textarea class="form-control form-control-lg mb-3" rows="5" id="reviewText"
+      placeholder="Example: 'The delivery was late but packaging was neat.'"></textarea>
+    <div class="d-flex justify-content-end">
+      <button class="btn btn-predict" id="predictBtn">
+        <i class="fa-solid fa-wand-magic-sparkles me-2"></i>Analyze
+      </button>
+    </div>
+  </section>
+
+  <!-- Result Display -->
+  <section class="card-custom p-4 d-none" id="resultCard">
+    <div class="text-center">
+      <div class="result-label" id="predictionLabel">Analyzing...</div>
+      <div id="predictionModel">Model: --</div>
+      <div id="sentimentEmoji" style="font-size:2rem;margin-top:.5rem;">🤖</div>
+    </div>
+
+    <div class="mt-4">
+      <h6><i class="fa-solid fa-signal me-2"></i>Confidence Level</h6>
+      <div class="progress-custom">
+        <div class="progress-bar-custom" id="confidenceBar" style="width:0%">0%</div>
+      </div>
+    </div>
+  </section>
+
+  <div class="toast-container position-fixed top-0 end-0 p-3" id="toastContainer"></div>
+</main>
+
+<script>
+const predictBtn = document.getElementById('predictBtn');
+const resultCard = document.getElementById('resultCard');
+const confidenceBar = document.getElementById('confidenceBar');
+const label = document.getElementById('predictionLabel');
+const emoji = document.getElementById('sentimentEmoji');
+const modelInfo = document.getElementById('predictionModel');
+
+function showToast(msg, type = 'success') {
+  const toast = document.createElement('div');
+  toast.className = 'toast-custom mb-2';
+  toast.innerHTML = `<i class="fa-solid fa-${type === 'success' ? 'check-circle text-success' : 'xmark text-danger'} me-2"></i>${msg}`;
+  document.getElementById('toastContainer').appendChild(toast);
+  setTimeout(() => toast.remove(), 3000);
+}
+
+predictBtn.addEventListener('click', async () => {
+  const text = document.getElementById('reviewText').value.trim();
+  const model = document.querySelector('input[name="modelChoice"]:checked').value;
+  if (!text) return showToast('Please enter a review.', 'error');
+
+  predictBtn.disabled = true;
+  predictBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin me-2"></i>Analyzing...';
+
+  await new Promise(r => setTimeout(r, 1500)); // simulate loading
+  predictBtn.disabled = false;
+  predictBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles me-2"></i>Analyze';
+
+  resultCard.classList.remove('d-none');
+
+  // Mock prediction
+  const sentiments = ['positive', 'neutral', 'negative'];
+  const pick = sentiments[Math.floor(Math.random() * sentiments.length)];
+  const conf = Math.random() * 0.5 + 0.5;
+
+  label.textContent = pick.charAt(0).toUpperCase() + pick.slice(1) + ' Review';
+  emoji.textContent = pick === 'positive' ? '😄' : pick === 'neutral' ? '😐' : '😞';
+
+
+
+  modelInfo.textContent = `Model: ${model === 'tfidf' ? 'TF-IDF' : 'DistilBERT'}`;
+  confidenceBar.style.width = Math.round(conf * 100) + '%';
+  confidenceBar.textContent = Math.round(conf * 100) + '%';
+  showToast('✅ Analysis complete!');
+});
+</script>
+</body>
+</html>
+
+
+

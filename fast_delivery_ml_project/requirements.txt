@@ -1,0 +1,22 @@
+# Core
+pandas>=2.1
+numpy>=1.26
+scikit-learn>=1.4
+matplotlib>=3.8
+nltk>=3.8.1
+emoji>=2.10.1
+pyyaml>=6.0.1
+joblib>=1.3
+
+# Boosted trees
+xgboost>=2.0
+lightgbm>=4.0
+
+# Transformers (optional but recommended)
+torch>=2.2
+transformers>=4.41
+datasets>=2.19
+accelerate>=0.30
+
+# Progress & utils
+tqdm>=4.66
