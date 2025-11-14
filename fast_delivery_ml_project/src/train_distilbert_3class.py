@@ -1,257 +1,186 @@
+"""
+DistilBERT Training Script for 3-Class Sentiment Classification
+Fine-tunes DistilBERT on enhanced delivery reviews dataset
+"""
 import pandas as pd
-import numpy as np
+import torch
 from pathlib import Path
-from datasets import Dataset, DatasetDict
 from transformers import (
-    AutoTokenizer, 
-    AutoModelForSequenceClassification,
-    TrainingArguments, 
+    DistilBertTokenizer,
+    DistilBertForSequenceClassification,
     Trainer,
-    EarlyStoppingCallback,
-    DataCollatorWithPadding
+    TrainingArguments,
+    EarlyStoppingCallback
 )
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import accuracy_score, f1_score, precision_recall_fscore_support, confusion_matrix, classification_report
-from sklearn.utils.class_weight import compute_class_weight
+from sklearn.metrics import accuracy_score, f1_score, classification_report
 import json
-import logging
-import torch
-import random
+import numpy as np
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configuration
+DATA_FILE = Path(__file__).parent.parent / "data" / "raw" / "delivery_reviews_enhanced.csv"
+MODEL_DIR = Path(__file__).parent.parent / "models" / "distilbert_3class"
+LABEL_MAP = {"Incorrect": 0, "Neutral": 1, "Correct": 2}
 
-# Paths
-ROOT = Path(__file__).resolve().parents[2]
-DATA_FILE = ROOT / "fast_delivery_ml_project" / "data" / "raw" / "delivery_reviews_enhanced.csv"
-MODELS_DIR = ROOT / "fast_delivery_ml_project" / "models"
-DISTILBERT_DIR = MODELS_DIR / "distilbert_3class"
-METRICS_PATH = MODELS_DIR / "metrics.json"
+class ReviewDataset(torch.utils.data.Dataset):
+    """PyTorch Dataset for reviews"""
+    def __init__(self, encodings, labels):
+        self.encodings = encodings
+        self.labels = labels
 
-# LABEL MAPPING for Customer Feedback Type
-LABEL_MAP = {"Negative": 0, "Neutral": 1, "Positive": 2}
-ID2LABEL = {0: "Negative", 1: "Neutral", 2: "Positive"}
+    def __getitem__(self, idx):
+        item = {key: torch.tensor(val[idx]) for key, val in self.encodings.items()}
+        item['labels'] = torch.tensor(self.labels[idx])
+        return item
 
-# Simple data augmentation via synonym replacement
-def augment_text(text):
-    """Add slight variations to text for diversity"""
-    synonyms = {
-        "fast": ["quick", "swift", "prompt"],
-        "great": ["excellent", "awesome", "fantastic"],
-        "late": ["delayed", "tardy", "slow"],
-        "poor": ["bad", "terrible", "subpar"],
-        "okay": ["fine", "decent", "acceptable"],
-        "service": ["support", "assistance", "delivery"],
-        "driver": ["courier", "delivery person", "rider"],
-        "items": ["products", "goods", "order"]
-    }
-    words = text.split()
-    for i, word in enumerate(words):
-        if random.random() < 0.2:  # 20% chance to replace
-            for key, vals in synonyms.items():
-                if word.lower() == key:
-                    words[i] = random.choice(vals)
-                    break
-    return " ".join(words)
+    def __len__(self):
+        return len(self.labels)
 
-# DATA PIPELINE
-def load_and_prepare_data():
-    """Load dataset and apply augmentation"""
-    df = pd.read_csv(DATA_FILE)
-    logger.info(f"Loaded {len(df)} reviews")
-    
-    if "Review Text" not in df.columns or "Customer Feedback Type" not in df.columns:
-        raise ValueError("Missing required columns: 'Review Text' or 'Customer Feedback Type'")
-    
-    df = df[["Review Text", "Customer Feedback Type"]].rename(columns={"Review Text": "text", "Customer Feedback Type": "label"})
-    df = df.dropna(subset=["text", "label"])
-    df["label"] = df["label"].str.strip().str.capitalize()
-    df = df[df["label"].isin(["Negative", "Neutral", "Positive"])]
-    
-    # Augment data by creating one varied copy per review
-    augmented = df.copy()
-    augmented["text"] = augmented["text"].apply(augment_text)
-    df = pd.concat([df, augmented], ignore_index=True)
-    df = df.drop_duplicates(subset=["text"])
-    
-    logger.info(f"After cleaning and augmentation: {len(df)} reviews")
-    logger.info(f"Final label distribution:\n{df['label'].value_counts()}")
-    return df
-
-def create_datasets(df, test_size=0.15, val_size=0.15):
-    df["label_id"] = df["label"].map(LABEL_MAP)
-    train_val, test = train_test_split(df, test_size=test_size, stratify=df["label_id"], random_state=42, shuffle=True)
-    val_ratio = val_size / (1 - test_size)
-    train, val = train_test_split(train_val, test_size=val_ratio, stratify=train_val["label_id"], random_state=42, shuffle=True)
-    train_ds = Dataset.from_pandas(train[["text","label_id"]].rename(columns={"label_id":"labels"}))
-    val_ds = Dataset.from_pandas(val[["text","label_id"]].rename(columns={"label_id":"labels"}))
-    test_ds = Dataset.from_pandas(test[["text","label_id"]].rename(columns={"label_id":"labels"}))
-    return DatasetDict({"train":train_ds,"validation":val_ds,"test":test_ds})
-
-def tokenize_datasets(datasets, model_name="distilbert-base-uncased"):
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    def tok_fn(examples): return tokenizer(examples["text"], truncation=True, max_length=256, padding="max_length")
-    return datasets.map(tok_fn, batched=True, remove_columns=["text"]), tokenizer
-
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-    preds = np.argmax(logits, axis=-1)
+def compute_metrics(pred):
+    """Compute metrics for evaluation"""
+    labels = pred.label_ids
+    preds = pred.predictions.argmax(-1)
     acc = accuracy_score(labels, preds)
-    prec, rec, f1, _ = precision_recall_fscore_support(labels, preds, average='weighted')
-    logger.info(f"\nConfusion Matrix:\n{confusion_matrix(labels, preds)}")
-    logger.info(classification_report(labels, preds, target_names=list(ID2LABEL.values())))
-    return {"accuracy": acc, "precision": prec, "recall": rec, "f1": f1}
+    f1 = f1_score(labels, preds, average='weighted')
+    return {'accuracy': acc, 'f1': f1}
 
 class WeightedTrainer(Trainer):
+    """Custom Trainer with class weights"""
     def __init__(self, *args, class_weights=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.class_weights = class_weights
-    def compute_loss(self, model, inputs, return_outputs=False, **kwargs):
+
+    def compute_loss(self, model, inputs, return_outputs=False):
         labels = inputs.pop("labels")
         outputs = model(**inputs)
         logits = outputs.logits
+        
         if self.class_weights is not None:
-            w = torch.tensor(self.class_weights, dtype=torch.float32).to(logits.device)
-            loss_fct = torch.nn.CrossEntropyLoss(weight=w)
+            loss_fct = torch.nn.CrossEntropyLoss(weight=self.class_weights)
         else:
             loss_fct = torch.nn.CrossEntropyLoss()
+        
         loss = loss_fct(logits, labels)
         return (loss, outputs) if return_outputs else loss
 
-def train_model(datasets, tokenizer, output_dir=DISTILBERT_DIR, epochs=15):
-    """Train DistilBERT with optimized settings for high accuracy"""
-    logger.info("\n" + "="*60)
-    logger.info("INITIALIZING DISTILBERT 3-CLASS MODEL")
-    logger.info("="*60)
+def train_distilbert_model():
+    """Train DistilBERT model"""
+    print("🔄 Loading dataset...")
+    df = pd.read_csv(DATA_FILE)
     
-    output_dir.mkdir(parents=True, exist_ok=True)
+    # Map labels
+    df['label'] = df['sentiment'].map(LABEL_MAP)
     
-    model = AutoModelForSequenceClassification.from_pretrained(
-        "distilbert-base-uncased",
-        num_labels=3,
-        id2label=ID2LABEL,
-        label2id=LABEL_MAP
+    print(f"📊 Dataset size: {len(df)} samples")
+    print(f"📈 Distribution:\n{df['sentiment'].value_counts()}")
+    
+    # Split data
+    train_texts, val_texts, train_labels, val_labels = train_test_split(
+        df['review'].tolist(),
+        df['label'].tolist(),
+        test_size=0.2,
+        random_state=42,
+        stratify=df['label']
     )
     
-    # Compute class weights
-    train_labels = datasets["train"]["labels"]
-    class_weights = compute_class_weight(
-        class_weight='balanced',
-        classes=np.unique(train_labels),
-        y=train_labels
-    )
-    logger.info(f"\nClass weights: {dict(zip(ID2LABEL.values(), class_weights))}")
+    print("\n🔧 Loading DistilBERT tokenizer...")
+    tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
     
+    print("🔧 Tokenizing data...")
+    train_encodings = tokenizer(train_texts, truncation=True, padding=True, max_length=128)
+    val_encodings = tokenizer(val_texts, truncation=True, padding=True, max_length=128)
+    
+    train_dataset = ReviewDataset(train_encodings, train_labels)
+    val_dataset = ReviewDataset(val_encodings, val_labels)
+    
+    # Calculate class weights
+    class_counts = np.bincount(train_labels)
+    class_weights = torch.FloatTensor(len(class_counts) / class_counts)
+    
+    print(f"\n⚖️  Class weights: {class_weights.tolist()}")
+    
+    print("\n🔧 Loading DistilBERT model...")
+    model = DistilBertForSequenceClassification.from_pretrained(
+        'distilbert-base-uncased',
+        num_labels=3
+    )
+    
+    # Training arguments with save_safetensors=False
     training_args = TrainingArguments(
-        output_dir=str(output_dir),
-        num_train_epochs=epochs,  # Increased for better convergence
-        per_device_train_batch_size=8,
+        output_dir=str(MODEL_DIR),
+        num_train_epochs=10,
+        per_device_train_batch_size=16,
         per_device_eval_batch_size=16,
-        learning_rate=1e-5,  # Lower for stability
-        weight_decay=0.05,  # Increased to prevent overfitting
-        warmup_ratio=0.2,  # Longer warmup
-        lr_scheduler_type="cosine",
+        warmup_steps=100,
+        weight_decay=0.01,
+        logging_dir=str(MODEL_DIR / 'logs'),
+        logging_steps=10,
         eval_strategy="epoch",
         save_strategy="epoch",
         load_best_model_at_end=True,
         metric_for_best_model="f1",
-        greater_is_better=True,
-        logging_dir=str(output_dir / "logs"),
-        logging_steps=50,
         save_total_limit=2,
-        seed=42,
-        fp16=torch.cuda.is_available(),
-        dataloader_num_workers=2,
-        report_to="none",
-        save_safetensors=False,
-        gradient_accumulation_steps=8,  # Effective batch size = 8*8=64
-        max_grad_norm=1.0,  # Gradient clipping
+        save_safetensors=False,  # Force pytorch_model.bin format
+        report_to="none"
     )
     
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-    
+    print("🔧 Starting training...")
     trainer = WeightedTrainer(
         model=model,
         args=training_args,
-        train_dataset=datasets["train"],
-        eval_dataset=datasets["validation"],
-        tokenizer=tokenizer,
-        data_collator=data_collator,
+        train_dataset=train_dataset,
+        eval_dataset=val_dataset,
         compute_metrics=compute_metrics,
-        callbacks=[EarlyStoppingCallback(early_stopping_patience=5)],
-        class_weights=class_weights.tolist()
+        callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
+        class_weights=class_weights
     )
-    
-    logger.info("\n" + "="*60)
-    logger.info("STARTING TRAINING")
-    logger.info("="*60)
     
     trainer.train()
     
-    logger.info("\n" + "="*60)
-    logger.info("EVALUATING ON TEST SET")
-    logger.info("="*60)
+    print("\n📊 Evaluating model...")
+    eval_results = trainer.evaluate()
     
-    test_results = trainer.evaluate(datasets["test"])
+    print(f"\n✅ Final Results:")
+    print(f"   Accuracy: {eval_results['eval_accuracy']:.4f}")
+    print(f"   F1 Score: {eval_results['eval_f1']:.4f}")
     
-    logger.info(f"\nSaving model to {output_dir}")
-    trainer.save_model(str(output_dir))
-    tokenizer.save_pretrained(str(output_dir))
+    # Generate predictions for classification report
+    predictions = trainer.predict(val_dataset)
+    preds = predictions.predictions.argmax(-1)
     
-    # Save again explicitly with PyTorch format
-    model.save_pretrained(str(output_dir), safe_serialization=False)
+    print(f"\n{classification_report(val_labels, preds, target_names=['negative', 'neutral', 'positive'])}")
     
-    # Verify files
-    config_file = output_dir / "config.json"
-    model_bin_file = output_dir / "pytorch_model.bin"
-    model_safetensors_file = output_dir / "model.safetensors"
-    tokenizer_file = output_dir / "tokenizer.json"
+    # Save model with explicit safe_serialization=False
+    print(f"\n💾 Saving model to {MODEL_DIR}...")
+    model.save_pretrained(MODEL_DIR, safe_serialization=False)
+    tokenizer.save_pretrained(MODEL_DIR)
     
-    logger.info(f"\nVerifying saved files:")
-    logger.info(f"  config.json exists: {config_file.exists()}")
-    logger.info(f"  pytorch_model.bin exists: {model_bin_file.exists()}")
-    logger.info(f"  model.safetensors exists: {model_safetensors_file.exists()}")
-    logger.info(f"  tokenizer.json exists: {tokenizer_file.exists()}")
-    
-    if not (model_bin_file.exists() or model_safetensors_file.exists()):
-        raise RuntimeError(f"No model weights saved! Check {output_dir}")
+    # Verify pytorch_model.bin was created
+    model_bin_path = MODEL_DIR / "pytorch_model.bin"
+    if model_bin_path.exists():
+        print(f"✅ Verified: pytorch_model.bin exists ({model_bin_path.stat().st_size / 1024 / 1024:.1f} MB)")
+    else:
+        print(f"⚠️  Warning: pytorch_model.bin not found!")
     
     # Save metrics
-    metrics = {
-        "distilbert_3class": {
-            "accuracy": float(test_results.get("eval_accuracy", 0.0)),
-            "f1": float(test_results.get("eval_f1", 0.0)),
-            "precision": float(test_results.get("eval_precision", 0.0)),
-            "recall": float(test_results.get("eval_recall", 0.0)),
-        }
+    metrics_path = MODEL_DIR.parent / "metrics.json"
+    try:
+        with open(metrics_path, "r") as f:
+            metrics = json.load(f)
+    except FileNotFoundError:
+        metrics = {}
+    
+    metrics["distilbert"] = {
+        "accuracy": float(eval_results['eval_accuracy']),
+        "f1_score": float(eval_results['eval_f1'])
     }
     
-    if METRICS_PATH.exists():
-        try:
-            with METRICS_PATH.open("r") as f:
-                existing = json.load(f)
-            existing.update(metrics)
-            metrics = existing
-        except Exception:
-            pass
-    
-    MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    with METRICS_PATH.open("w", encoding="utf-8") as f:
+    with open(metrics_path, "w") as f:
         json.dump(metrics, f, indent=2)
     
-    logger.info(f"\nMetrics saved to: {METRICS_PATH}")
-    
-    return trainer, test_results
-
-def main():
-    logger.info("="*60)
-    logger.info("DISTILBERT 3-CLASS SENTIMENT TRAINING")
-    logger.info("="*60)
-    df = load_and_prepare_data()
-    ds = create_datasets(df)
-    tok_ds, tokenizer = tokenize_datasets(ds)
-    train_model(tok_ds, tokenizer, epochs=15)
-    logger.info("Training complete ✅")
+    print(f"\n✅ Training complete!")
+    print(f"   Model saved to: {MODEL_DIR}")
+    print(f"   Metrics saved to: {metrics_path}")
 
 if __name__ == "__main__":
-    main()
+    train_distilbert_model()

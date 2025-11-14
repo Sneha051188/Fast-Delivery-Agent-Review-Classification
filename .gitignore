@@ -1,0 +1,105 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+*.so
+*.dll
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+venv.bak/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+.eggs/
+wheels/
+
+# IDEs / editors
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# Logs and reports
+*.log
+logs/
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.mypy_cache/
+.tox/
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Environment / secrets
+.env
+.env.*
+.envrc
+secrets.json
+
+# Cache
+.cache/
+__pypackages__/
+
+# Model weights / checkpoints (large files)
+fast_delivery_ml_project/models/**/pytorch_model.bin
+fast_delivery_ml_project/models/**/model.safetensors
+fast_delivery_ml_project/models/**/*.pt
+fast_delivery_ml_project/models/**/*.pth
+fast_delivery_ml_project/models/**/*.ckpt
+fast_delivery_ml_project/models/**/*.bin
+fast_delivery_ml_project/models/distilbert_3class/
+fast_delivery_ml_project/models/distilbert/
+fast_delivery_ml_project/models/*.pkl
+fast_delivery_ml_project/models/*.joblib
+
+# Keep metrics.json (small, useful)
+!fast_delivery_ml_project/models/metrics.json
+
+# Hugging Face / transformers caches
+transformers_cache/
+huggingface_cache/
+hf_cache/
+.cache/huggingface/
+
+# Data (generated / raw / large)
+fast_delivery_ml_project/data/raw/delivery_reviews_enhanced.csv
+fast_delivery_ml_project/data/processed/
+fast_delivery_ml_project/data/cache/
+
+# Keep original small dataset
+!fast_delivery_ml_project/data/raw/delivery_reviews.csv
+
+# Training logs
+fast_delivery_ml_project/models/**/logs/
+fast_delivery_ml_project/models/**/checkpoint-*/
+
+# Feedback data
+data/feedback/*.jsonl
+data/feedback/*.csv
+
+# Misc
+*.sqlite
+*.db
+*.bak
+temp/
+tmp/
