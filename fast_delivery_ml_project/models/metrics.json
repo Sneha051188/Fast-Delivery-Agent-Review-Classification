@@ -1,0 +1,14 @@
+{
+  "tfidf": {
+    "accuracy": 1.0,
+    "f1_score": 1.0,
+    "best_params": {
+      "C": 1.0,
+      "max_iter": 200
+    }
+  },
+  "distilbert": {
+    "accuracy": 1.0,
+    "f1_score": 1.0
+  }
+}
