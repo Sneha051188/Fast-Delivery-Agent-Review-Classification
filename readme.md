@@ -2,6 +2,10 @@
 
 Machine learning project for 3-class sentiment analysis of delivery reviews.
 
+## 🌐 Live Demo
+
+**Try it now:** [https://fast-delivery-agent-review-classification.onrender.com](https://fast-delivery-agent-review-classification.onrender.com)
+
 ## 🚀 Quick Start
 
 ```bash
