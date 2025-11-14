@@ -4,6 +4,7 @@ TF-IDF Model Only (Python 3.13 compatible)
 """
 import logging
 import json
+import os
 from pathlib import Path
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
@@ -120,4 +121,6 @@ if __name__ == "__main__":
     logger.info("✅ API ready!")
     logger.info("🌐 Open http://127.0.0.1:5000 in your browser")
     
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    # Get port from environment variable for deployment platforms
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
