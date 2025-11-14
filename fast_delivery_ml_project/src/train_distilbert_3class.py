@@ -146,7 +146,11 @@ def train_distilbert_model():
     
     # Generate predictions for classification report
     predictions = trainer.predict(val_dataset)
-    preds = predictions.predictions.argmax(-1)
+    preds_array = predictions.predictions
+    # Trainer.predict may return a tuple (e.g., (logits, ...)), so take the first element if needed
+    if isinstance(preds_array, tuple):
+        preds_array = preds_array[0]
+    preds = preds_array.argmax(-1).tolist()
     
     print(f"\n{classification_report(val_labels, preds, target_names=['negative', 'neutral', 'positive'])}")
     
